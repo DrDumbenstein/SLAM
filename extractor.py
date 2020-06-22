@@ -8,10 +8,26 @@ def add_ones(x):
     return np.concatenate([x, np.ones((x.shape[0], 1))], axis=1)
 
 
+def extractRt(E):
+    W = np.mat([[0, -1, 0], [1, 0, 0], [0, 0, 1]], dtype=float)
+    U, d, Vt = np.linalg.svd(E)
+    assert np.linalg.det(U) > 0
+    if np.linalg.det(Vt) < 0:
+        Vt *= -1.0
+
+    R = np.dot(np.dot(U, W), Vt)
+    if np.sum(R.diagonal() < 0):
+        R = np.dot(np.dot(U, W.T), Vt)
+
+    t = U[:, 2]
+    pose = np.concatenate((R, t.reshape(3, 1)), axis=1)
+    return pose
+
+
 class Extractor(object):
 
     def __init__(self, K):
-        self.orb = cv2.ORB_create(100)
+        self.orb = cv2.ORB_create(5)
         self.bf = cv2.BFMatcher(cv2.NORM_HAMMING)
         self.last = None
         self.K = K
@@ -42,27 +58,25 @@ class Extractor(object):
                     kp2 = self.last['kps'][m.trainIdx].pt
                     ret.append((kp1, kp2))
 
-
-
         # Filter
-        matches = []
+        pose = []
         if len(ret) > 0:
             ret = np.array(ret)
+
             # Normalize coors: substract to move to 0
             ret[:, 0, :] = self.normalize(ret[:, 0, :])
             ret[:, 1, :] = self.normalize(ret[:, 1, :])
 
-            print(ret.shape)
             model, inliers = ransac((ret[:, 0], ret[:, 1]),
-                                    #EssentialMatrixTransform,
-                                    FundamentalMatrixTransform,
+                                    EssentialMatrixTransform,
+                                    #FundamentalMatrixTransform,
                                     min_samples=8,
-                                    residual_threshold=0.01, max_trials=100)
+                                    residual_threshold=0.005, max_trials=100)
 
             ret = ret[inliers]
-            s, v, d = np.linalg.svd(model.params)
-            print(v)
+            pose = extractRt(model.params)
 
         self.last = {'kps': kps, 'des': des}
 
-        return ret
+        return ret, pose
+

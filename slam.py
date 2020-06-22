@@ -5,7 +5,7 @@ from extractor import Extractor
 
 W = 1920//2
 H = 1080//2
-F = 1
+F = 200
 
 # Intrinsic Parameters Of The Camera
 K = np.array(([F, 0, W//2], [0, F, H//2], [0, 0, 1]))
@@ -17,7 +17,12 @@ fe = Extractor(K)
 
 def process_frame(img):
     img = cv2.resize(img, (H, W))
-    ret = fe.extract(img)
+    ret, pose = fe.extract(img)
+    if pose is None:
+        return
+
+    print(len(ret), " matches")
+    print(pose)
 
     for pt1, pt2 in ret:
         u1, v1 = fe.denormalize(pt1)
