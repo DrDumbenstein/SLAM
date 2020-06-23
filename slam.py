@@ -1,35 +1,38 @@
 import cv2
 import numpy as np
 from display import Display
-from extractor import Extractor
+from frame import Frame, denormalize, match
+import g2o
 
+
+# Intrinsic Parameters Of The Camera
 W = 1920//2
 H = 1080//2
 F = 200
-
-# Intrinsic Parameters Of The Camera
 K = np.array(([F, 0, W//2], [0, F, H//2], [0, 0, 1]))
 
+# Main classes
 display = Display(W, H)
 
-fe = Extractor(K)
+frames = []
 
 
 def process_frame(img):
     img = cv2.resize(img, (H, W))
-    ret, pose = fe.extract(img)
-    if pose is None:
+    frame = Frame(img, K)
+    frames.append(frame)
+
+    if len(frames) <=1:
         return
 
-    print(len(ret), " matches")
-    print(pose)
+    ret, Rt = match(frames[-2], frames[-1])
 
     for pt1, pt2 in ret:
-        u1, v1 = fe.denormalize(pt1)
-        u2, v2 = fe.denormalize(pt2)
+        u1, v1 = denormalize(K, pt1)
+        u2, v2 = denormalize(K, pt2)
 
-        cv2.circle(img, (u1, v1), color=(0, 0, 255), radius=3)
-        cv2.line(img, (u1, v1), (u2, v2), color=(0, 255, 0))
+        cv2.circle(img, (u1, v1), color=(0, 255, 0), radius=3)
+        cv2.line(img, (u1, v1), (u2, v2), color=(255, 0, 0))
 
     display.draw(img)
 
