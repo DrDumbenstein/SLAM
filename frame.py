@@ -92,7 +92,7 @@ def denormalize(K, pt):
 
 
 class Frame(object):
-    def __init__(self, img, K):
+    def __init__(self, mapp, img, K):
         self.K = K
         self.Kinv = np.linalg.inv(self.K)
         self.pose = IRt
@@ -100,7 +100,8 @@ class Frame(object):
         features, self.des = extract(img)
         self.pts = normalize(self.Kinv, features)
 
-
+        self.id = len(mapp.frames)
+        mapp.frames.append(self)
 
 
 
