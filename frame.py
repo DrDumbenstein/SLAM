@@ -4,11 +4,14 @@ from skimage.measure import ransac
 from skimage.transform import EssentialMatrixTransform, FundamentalMatrixTransform
 
 
+IRt = np.eye(4)
+
+
 def add_ones(x):
     return np.concatenate([x, np.ones((x.shape[0], 1))], axis=1)
 
 
-def extractRt(E):
+def extractPose(E):
     W = np.mat([[0, -1, 0], [1, 0, 0], [0, 0, 1]], dtype=float)
     U, d, Vt = np.linalg.svd(E)
     assert np.linalg.det(U) > 0
@@ -20,25 +23,36 @@ def extractRt(E):
         R = np.dot(np.dot(U, W.T), Vt)
 
     t = U[:, 2]
-    pose = np.concatenate((R, t.reshape(3, 1)), axis=1)
+    pose = np.eye(4)
+    pose[:3, :3] = R
+    pose[:3, 3] = t
+
     return pose
 
 
-def match(f1, f2):
+def match_frames(f1, f2):
     bf = cv2.BFMatcher(cv2.NORM_HAMMING)
     # Matching
     matches = bf.knnMatch(f1.des, f2.des, k=2)
 
     # Lowe's ratio test
     ret = []
+    idx1, idx2 = [], []
+
     for m, n in matches:
+        # Keep aroun idecies
         if m.distance < 0.75 * n.distance:
+            idx1.append(m.queryIdx)
+            idx2.append(m.trainIdx)
+
             p1 = f1.pts[m.queryIdx]
             p2 = f2.pts[m.trainIdx]
             ret.append((p1, p2))
 
     assert len(ret) !=0
     ret = np.array(ret)
+    idx1 = np.array(idx1)
+    idx2 = np.array(idx2)
 
     # fit matrix
     model, inliers = ransac((ret[:, 0], ret[:, 1]),
@@ -48,10 +62,10 @@ def match(f1, f2):
                             residual_threshold=0.005, max_trials=100)
 
     # Ignore outliers
-    ret = ret[inliers]
-    Rt = extractRt(model.params)
+    #ret = ret[inliers]
+    Rt = extractPose(model.params)
 
-    return ret, Rt
+    return idx1[inliers], idx2[inliers], Rt
 
 
 def extract(img):
@@ -81,6 +95,8 @@ class Frame(object):
     def __init__(self, img, K):
         self.K = K
         self.Kinv = np.linalg.inv(self.K)
+        self.pose = IRt
+
         features, self.des = extract(img)
         self.pts = normalize(self.Kinv, features)
 
