@@ -1,8 +1,9 @@
 import cv2
 import numpy as np
 from display import Display
-from frame import Frame, denormalize, match_frames, IRt
+from frame import Frame, denormalize, match_frames
 import g2o
+import open3d as o3d
 
 
 # Intrinsic Parameters Of The Camera
@@ -20,11 +21,48 @@ class Map(object):
     def __init__(self):
         self.frames = []
         self.points = []
+        self.state = None
+        self.pcd1 = o3d.geometry.PointCloud()
+        self.pcd = o3d.geometry.PointCloud()
+
+    def convert_to_pcd(self, spts, ppts):
+        # turn state into points
+        self.pcd1.points = o3d.utility.Vector3dVector(spts)
+        self.pcd.points = o3d.utility.Vector3dVector(ppts)
+
+    def custom_draw_geometry(self):
+        # The following code achieves the same effect as:
+        # o3d.visualization.draw_geometries([pcd])
+        vis = o3d.visualization.VisualizerWithEditing()
+        vis.create_window(window_name='Open3D', width=1920//2, height=1080//2, left=50, top=50, visible=True)
+        pcd = o3d.geometry.PointCloud(self.pcd)
+        #pcd1 = o3d.geometry.PointCloud(self.pcd1)
+
+        vis.add_geometry(pcd)
+        vis.update_geometry(pcd)
+        vis.update_renderer()
+        vis.poll_events()
 
     def display_map(self):
-        for F in self.frames:
-            print(F.id)
-            print(F.pose)
+        poses, pts = [], []
+        for f in self.frames:
+            poses.append(f.pose)
+
+        for p in self.points:
+            pts.append(p.xyz)
+
+        poses = np.asarray(poses)
+        pts = np.asarray(pts)
+
+        self.state = poses, pts
+
+        # From state to points
+        ppts = np.array([d[:3, 3] for d in self.state[0]])
+        spts = np.array([d[:3] for d in self.state[1]])  # Dropping the last column shape (n, 3) np.delete(self.state[1], 3, 1)
+
+        self.convert_to_pcd(spts, ppts)
+        self.custom_draw_geometry()
+        #o3d.visualization.draw_geometries_with_custom_animation(self.pcd)
 
 
 mapp = Map()
@@ -34,7 +72,7 @@ class Point(object):
     # Point in the world
     # Each point is observed in multiple frames
 
-    def __init__(self, loc):
+    def __init__(self, mapp, loc):
         self.xyz = loc
         self.frames = []
         self.idxs = []
@@ -76,7 +114,7 @@ def process_frame(img):
     for i,p in enumerate(pts4d):
         if not good_4dpts[i]:
             continue
-        pt = Point(mapp)
+        pt = Point(mapp, p)
         pt.add_observation(f1, idx1[i])
         pt.add_observation(f2, idx2[i])
 
@@ -90,6 +128,7 @@ def process_frame(img):
     display.draw(img)
 
     # Desplaying a stupid map
+
     mapp.display_map()
 
 
